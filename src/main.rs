@@ -1,17 +1,23 @@
-use gstreamer::buffer::Readable;
-use gstreamer::glib::{BoolError, gstr};
+mod trackers;
+mod utils;
+mod yolo;
+
 use gstreamer::prelude::*;
-use gstreamer::{BufferMap, BufferRef, FlowError, FlowSuccess, Pipeline, Sample};
+use gstreamer::{Pipeline};
 use opencv::prelude::*;
 use opencv::{core, imgproc};
+use opencv::core::{Rect, Scalar};
+use crate::trackers::NanoTrack;
+use crate::utils::{iou, mat_to_ndarray};
+use crate::yolo::YoloV8;
 
-fn main() {
+fn main() -> opencv::Result<()> {
     gstreamer::init().unwrap();
 
     let pipeline_in_str = concat!(
         "libcamerasrc ! ",
         "videoconvert ! ",
-        "video/x-raw,format=BGR,width=1632,height=1232,framerate=10/1 ! ",
+        "video/x-raw,format=RGB,width=1632,height=1232,framerate=10/1 ! ",
         "appsink name=sink sync=false max-buffers=1 drop=true"
     );
 
@@ -43,7 +49,7 @@ fn main() {
     let height = 1232i32;
     appsrc.set_caps(Some(
         &gstreamer::Caps::builder("video/x-raw")
-            .field("format", &"BGR")
+            .field("format", &"RGB")
             .field("width", &width)
             .field("height", &height)
             .field("framerate", &gstreamer::Fraction::new(10, 1))
@@ -87,6 +93,9 @@ fn main() {
     let appsrc_thread = appsrc.clone();
 
     std::thread::spawn(move || {
+        let mut yolo = YoloV8::new().unwrap();
+        let mut nano_track: Option<NanoTrack> = None;
+        let mut last_bbox: Option<Rect> = None;
         loop {
             match appsink_thread.try_pull_sample(gstreamer::ClockTime::from_seconds(5)) {
                 None => {
@@ -125,17 +134,71 @@ fn main() {
                         }
                     };
 
-                    let _ = imgproc::put_text(
-                        &mut mat,
-                        "Rust and OpenCV",
-                        core::Point::new(30, 50),
-                        imgproc::FONT_HERSHEY_SIMPLEX,
-                        1.0,
-                        core::Scalar::new(0.0, 0.0, 255.0, 0.0),
-                        2,
-                        imgproc::LINE_AA,
-                        false,
-                    );
+                    if let Some(t) = nano_track.as_mut() {
+                        if let Ok(bbox) = t.update(&mat) {
+                            imgproc::rectangle(
+                                &mut mat,
+                                bbox.unwrap(),
+                                Scalar::new(0.0, 255., 0., 0.),
+                                2,
+                                imgproc::LINE_8,
+                                0,
+                            ).unwrap();
+                        } else {
+                            nano_track = None;
+                        }
+                    }
+
+                    if nano_track.is_none() {
+                        let mut input = mat_to_ndarray(&mut mat, 640, 640);
+                        let boxes = yolo.infer2(&mut input, w, h);
+                        let mut candidate: Option<Rect> = None;
+
+                        if let Some(prev_bbox) = last_bbox {
+                            let mut best_iou = 0.0;
+                            for b in &boxes {
+                                let new_bbox = Rect::new(
+                                    b.x1 as i32,
+                                    b.y1 as i32,
+                                    (b.x2 -b.x1) as i32,
+                                    (b.y2 -b.y1) as i32,
+                                );
+                                let iou_val = iou(&prev_bbox, &new_bbox);
+                                if iou_val > best_iou {
+                                    best_iou = iou_val;
+                                    candidate = Some(new_bbox);
+                                }
+                            }
+                        }
+
+                        if candidate.is_none() {
+                            if let Some(first) = boxes.first() {
+                                candidate = Some(Rect::new(
+                                    first.x1 as i32,
+                                    first.y1 as i32,
+                                    (first.x2 - first.x1) as i32,
+                                    (first.y2 - first.y1) as i32,
+                                ));
+                            }
+                        }
+
+                        if let Some(candidate) = candidate {
+                            nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
+                        }
+                    }
+
+
+                    // let _ = imgproc::put_text(
+                    //     &mut mat,
+                    //     "Rust and OpenCV",
+                    //     core::Point::new(30, 50),
+                    //     imgproc::FONT_HERSHEY_SIMPLEX,
+                    //     1.0,
+                    //     core::Scalar::new(0.0, 0.0, 255.0, 0.0),
+                    //     2,
+                    //     imgproc::LINE_AA,
+                    //     false,
+                    // );
 
                     let mut out_buffer = gstreamer::Buffer::with_size((w * h * 3) as usize)
                         .expect("Can't get buffer");
@@ -154,53 +217,11 @@ fn main() {
                     }
                 }
             }
-            // std::thread::sleep(std::time::Duration::from_millis(10));
-            // match appsink.pull_sample() {
-            //     Ok(sample) => {
-            //         println!("{:?}", sample);
-            //         let buffer = sample.buffer().unwrap();
-            //         let caps = sample.caps().unwrap();
-            //         let s = caps.structure(0).unwrap();
-            //         let width = s.get::<i32>("width").unwrap();
-            //         let height = s.get::<i32>("height").unwrap();
-            //
-            //         let map = buffer.map_readable().unwrap();
-            //         let mut data = map.as_slice().to_vec();
-            //
-            //         let mut mat =
-            //             Mat::new_rows_cols_with_bytes_mut::<u8>(height, width * 3, &mut data)
-            //                 .unwrap();
-            //
-            //         imgproc::put_text(
-            //             &mut mat,
-            //             "Rust and OpenCV",
-            //             core::Point::new(30, 50),
-            //             imgproc::FONT_HERSHEY_SIMPLEX,
-            //             1.0,
-            //             core::Scalar::new(0.0, 0.0, 255.0, 0.0),
-            //             2,
-            //             imgproc::LINE_AA,
-            //             false,
-            //         )
-            //         .unwrap();
-            //
-            //         let mut out_buffer =
-            //             gstreamer::Buffer::with_size((width * height * 3) as usize).unwrap();
-            //         {
-            //             let out_buffer_mut = out_buffer.get_mut().unwrap();
-            //             let mut out_map = out_buffer_mut.map_writable().unwrap();
-            //             out_map.copy_from_slice(mat.data_bytes().unwrap());
-            //         }
-            //
-            //         let _ = appsrc.push_buffer(out_buffer);
-            //     }
-            //     Err(err) => {
-            //         println!("Error: {:?}", err);
-            //     }
-            // }
         }
     });
 
     let main_loop = gstreamer::glib::MainLoop::new(None, false);
     main_loop.run();
+
+    Ok(())
 }
