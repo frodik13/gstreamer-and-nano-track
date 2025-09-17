@@ -7,7 +7,7 @@ fn main() {
     gstreamer::init().unwrap();
 
     let pipeline_in_str = "libcamerasrc !\
-     video/x-raw,format=BGR,width=640,height=512,framerate=25/1 !appsink name=sink";
+     video/x-raw,format=BGR,width=640,height=480,framerate=25/1 !appsink name=sink";
 
     let pipeline_in = gstreamer::parse::launch(pipeline_in_str).expect("Can't launch pipeline");
     let pipeline_in = pipeline_in
@@ -20,6 +20,9 @@ fn main() {
         .dynamic_cast::<gstreamer_app::AppSink>()
         .unwrap();
     appsink.set_property("emit-signals", &true);
+    appsink.set_property("sync", &false);
+    appsink.set_property("max-buffers", &1u32);
+    appsink.set_property("drop", &true);
 
     let pipeline_out = gstreamer::parse::launch(
         "appsrc name=src is-live=true block=true format=time ! videoconvert ! kmssink",
@@ -38,15 +41,17 @@ fn main() {
         &gstreamer::Caps::builder("video/x-raw")
             .field("format", &"BGR")
             .field("width", &640i32)
-            .field("height", &512i32)
+            .field("height", &480i32)
             .field("framerate", &gstreamer::Fraction::new(25, 1))
             .build(),
     ));
 
     std::thread::spawn(move || {
         loop {
+            std::thread::sleep(std::time::Duration::from_millis(10));
             match appsink.pull_sample() {
                 Ok(sample) => {
+                    println!("{:?}", sample);
                     let buffer = sample.buffer().unwrap();
                     let caps = sample.caps().unwrap();
                     let s = caps.structure(0).unwrap();
@@ -83,8 +88,8 @@ fn main() {
 
                     let _ = appsrc.push_buffer(out_buffer);
                 }
-                Err(_) => {
-                    break;
+                Err(err) => {
+                    println!("Error: {:?}", err);
                 }
             }
         }
