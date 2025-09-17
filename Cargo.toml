@@ -1,0 +1,12 @@
+[package]
+name = "nano_plus_gstreamer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gstreamer = "0.24.1"
+gstreamer-app = "0.24.0"
+gstreamer-video = "0.24.1"
+opencv = { version = "0.95.1", features = ["clang-runtime", "videoio", "highgui", "imgproc"]}
+ndarray = "0.16.1"
+ort = "2.0.0-rc.10"
