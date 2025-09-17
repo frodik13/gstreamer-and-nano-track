@@ -1,13 +1,19 @@
-use gstreamer::Pipeline;
+use gstreamer::buffer::Readable;
+use gstreamer::glib::{BoolError, gstr};
 use gstreamer::prelude::*;
+use gstreamer::{BufferMap, BufferRef, FlowError, FlowSuccess, Pipeline, Sample};
 use opencv::prelude::*;
 use opencv::{core, imgproc};
 
 fn main() {
     gstreamer::init().unwrap();
 
-    let pipeline_in_str = "libcamerasrc !\
-     video/x-raw,format=BGR,width=640,height=480,framerate=25/1 !appsink name=sink";
+    let pipeline_in_str = concat!(
+        "libcamerasrc ! ",
+        "videoconvert ! ",
+        "video/x-raw,format=BGR,width=1632,height=1232,framerate=10/1 ! ",
+        "appsink name=sink sync=false max-buffers=1 drop=true"
+    );
 
     let pipeline_in = gstreamer::parse::launch(pipeline_in_str).expect("Can't launch pipeline");
     let pipeline_in = pipeline_in
@@ -19,10 +25,6 @@ fn main() {
         .unwrap()
         .dynamic_cast::<gstreamer_app::AppSink>()
         .unwrap();
-    appsink.set_property("emit-signals", &true);
-    appsink.set_property("sync", &false);
-    appsink.set_property("max-buffers", &1u32);
-    appsink.set_property("drop", &true);
 
     let pipeline_out = gstreamer::parse::launch(
         "appsrc name=src is-live=true block=true format=time ! videoconvert ! kmssink",
@@ -37,35 +39,93 @@ fn main() {
         .dynamic_cast::<gstreamer_app::AppSrc>()
         .unwrap();
 
+    let width = 1632i32;
+    let height = 1232i32;
     appsrc.set_caps(Some(
         &gstreamer::Caps::builder("video/x-raw")
             .field("format", &"BGR")
-            .field("width", &640i32)
-            .field("height", &480i32)
-            .field("framerate", &gstreamer::Fraction::new(25, 1))
+            .field("width", &width)
+            .field("height", &height)
+            .field("framerate", &gstreamer::Fraction::new(10, 1))
             .build(),
     ));
 
+    pipeline_in
+        .set_state(gstreamer::State::Playing)
+        .expect("Can't set pipeline out");
+
+    pipeline_out
+        .set_state(gstreamer::State::Playing)
+        .expect("Can't set pipeline out");
+
+    {
+        let bus = pipeline_in.bus().unwrap();
+        std::thread::spawn(move || {
+            for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
+                use gstreamer::MessageView;
+                match msg.view() {
+                    MessageView::Error(err) => {
+                        eprintln!(
+                            "Pipeline (in) error from {:?}: {} ({:?})",
+                            err.src().map(|s| s.path_string()),
+                            err.error(),
+                            err.debug()
+                        );
+                        break;
+                    }
+                    MessageView::Eos(_) => {
+                        eprintln!("Pipeline (in) EOS");
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    let appsink_thread = appsink.clone();
+    let appsrc_thread = appsrc.clone();
+
     std::thread::spawn(move || {
         loop {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            match appsink.pull_sample() {
-                Ok(sample) => {
-                    println!("{:?}", sample);
-                    let buffer = sample.buffer().unwrap();
-                    let caps = sample.caps().unwrap();
-                    let s = caps.structure(0).unwrap();
-                    let width = s.get::<i32>("width").unwrap();
-                    let height = s.get::<i32>("height").unwrap();
+            match appsink_thread.try_pull_sample(gstreamer::ClockTime::from_seconds(5)) {
+                None => {
+                    println!("Can't pull sample");
+                }
+                Some(sample) => {
+                    let buffer = match sample.buffer() {
+                        None => {
+                            eprintln!("Can't get buffer");
+                            continue;
+                        }
+                        Some(b) => b,
+                    };
 
-                    let map = buffer.map_readable().unwrap();
+                    let caps = sample.caps().expect("Can't get caps");
+                    let s = caps.structure(0).expect("Can't get structure");
+                    let w = s.get::<i32>("width").expect("Can't get width");
+                    let h = s.get::<i32>("height").expect("Can't get height");
+
+                    let map = match buffer.map_readable() {
+                        Ok(m) => m,
+                        Err(err) => {
+                            eprintln!("Can't get map: {}", err);
+                            continue;
+                        }
+                    };
+
                     let mut data = map.as_slice().to_vec();
 
-                    let mut mat =
-                        Mat::new_rows_cols_with_bytes_mut::<u8>(height, width * 3, &mut data)
-                            .unwrap();
+                    let mut mat = match Mat::new_rows_cols_with_bytes_mut::<u8>(h, w * 3, &mut data)
+                    {
+                        Ok(m) => m,
+                        Err(err) => {
+                            eprintln!("Can't get mat: {}", err);
+                            continue;
+                        }
+                    };
 
-                    imgproc::put_text(
+                    let _ = imgproc::put_text(
                         &mut mat,
                         "Rust and OpenCV",
                         core::Point::new(30, 50),
@@ -75,23 +135,69 @@ fn main() {
                         2,
                         imgproc::LINE_AA,
                         false,
-                    )
-                    .unwrap();
+                    );
 
-                    let mut out_buffer =
-                        gstreamer::Buffer::with_size((width * height * 3) as usize).unwrap();
+                    let mut out_buffer = gstreamer::Buffer::with_size((w * h * 3) as usize)
+                        .expect("Can't get buffer");
                     {
-                        let out_buffer_mut = out_buffer.get_mut().unwrap();
-                        let mut out_map = out_buffer_mut.map_writable().unwrap();
+                        let out_buffer_mut = out_buffer.get_mut().expect("Can't get buffer");
+                        let mut out_map = out_buffer_mut.map_writable().expect("Can't get buffer");
                         out_map.copy_from_slice(mat.data_bytes().unwrap());
                     }
 
-                    let _ = appsrc.push_buffer(out_buffer);
-                }
-                Err(err) => {
-                    println!("Error: {:?}", err);
+                    match appsrc_thread.push_buffer(out_buffer) {
+                        Ok(_) => {}
+                        Err(err) => {
+                            eprintln!("Can't push buffer: {}", err);
+                            continue;
+                        }
+                    }
                 }
             }
+            // std::thread::sleep(std::time::Duration::from_millis(10));
+            // match appsink.pull_sample() {
+            //     Ok(sample) => {
+            //         println!("{:?}", sample);
+            //         let buffer = sample.buffer().unwrap();
+            //         let caps = sample.caps().unwrap();
+            //         let s = caps.structure(0).unwrap();
+            //         let width = s.get::<i32>("width").unwrap();
+            //         let height = s.get::<i32>("height").unwrap();
+            //
+            //         let map = buffer.map_readable().unwrap();
+            //         let mut data = map.as_slice().to_vec();
+            //
+            //         let mut mat =
+            //             Mat::new_rows_cols_with_bytes_mut::<u8>(height, width * 3, &mut data)
+            //                 .unwrap();
+            //
+            //         imgproc::put_text(
+            //             &mut mat,
+            //             "Rust and OpenCV",
+            //             core::Point::new(30, 50),
+            //             imgproc::FONT_HERSHEY_SIMPLEX,
+            //             1.0,
+            //             core::Scalar::new(0.0, 0.0, 255.0, 0.0),
+            //             2,
+            //             imgproc::LINE_AA,
+            //             false,
+            //         )
+            //         .unwrap();
+            //
+            //         let mut out_buffer =
+            //             gstreamer::Buffer::with_size((width * height * 3) as usize).unwrap();
+            //         {
+            //             let out_buffer_mut = out_buffer.get_mut().unwrap();
+            //             let mut out_map = out_buffer_mut.map_writable().unwrap();
+            //             out_map.copy_from_slice(mat.data_bytes().unwrap());
+            //         }
+            //
+            //         let _ = appsrc.push_buffer(out_buffer);
+            //     }
+            //     Err(err) => {
+            //         println!("Error: {:?}", err);
+            //     }
+            // }
         }
     });
 
