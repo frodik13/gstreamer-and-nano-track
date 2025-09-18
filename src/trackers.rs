@@ -14,10 +14,10 @@ impl NanoTrack {
     {
         let head = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("models")
-            .join("nanotrack_head_sim.onnx");
+            .join("nanotrack_head.onnx");
         let backbone = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("models")
-            .join("nanotrack_backbone_sim.onnx");
+            .join("nanotrack_backbone.onnx");
 
         let mut param = TrackerNano_Params::default()?;
         param.set_backbone(backbone.to_str().unwrap());
