@@ -194,8 +194,11 @@ fn main() -> opencv::Result<()> {
                             }
                         }
 
+                        println!("boxes len {}", boxes.len());
+
                         if candidate.is_none() {
                             if let Some(first) = boxes.first() {
+                                println!("first: {:?}", first);
                                 candidate = Some(Rect::new(
                                     first.x1 as i32,
                                     first.y1 as i32,
@@ -206,6 +209,7 @@ fn main() -> opencv::Result<()> {
                         }
 
                         if let Some(candidate) = candidate {
+                            println!("init tracker: {:?}", candidate);
                             nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
                         }
                     }

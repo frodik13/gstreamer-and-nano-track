@@ -4,6 +4,7 @@ use opencv::prelude::*;
 use opencv::{core, imgproc};
 use std::fs;
 
+#[derive(Debug)]
 pub struct BBox {
     pub x1: f32,
     pub y1: f32,
