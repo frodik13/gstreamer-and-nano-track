@@ -1,11 +1,10 @@
+mod kcftracker;
 mod trackers;
 mod utils;
 mod yolo;
-mod kcftracker;
 
-use std::fmt::format;
 use crate::trackers::NanoTrack;
-use crate::utils::{center_crop, get_cpu_temp, get_cpu_usage, get_mem_usage, iou, mat_to_ndarray};
+use crate::utils::{center_crop, expand_roi, get_cpu_temp, get_cpu_usage, get_mem_usage, iou, mat_to_ndarray};
 use crate::yolo::YoloV8;
 use gstreamer::Pipeline;
 use gstreamer::prelude::*;
@@ -13,7 +12,6 @@ use opencv::core::{Rect, Scalar};
 use opencv::prelude::*;
 use opencv::{core, imgproc};
 use std::os::raw::c_void;
-use crate::kcftracker::KcfTracker;
 
 fn main() -> opencv::Result<()> {
     gstreamer::init().unwrap();
@@ -144,8 +142,14 @@ fn main() -> opencv::Result<()> {
                     };
 
                     if let Some(t) = nano_track.as_mut() {
-                        let crop = center_crop(&mat, 300).unwrap();
+                        let crop = match last_bbox {
+                            None => {&mat}
+                            Some(l_bb) => {
+                                &expand_roi(&mat, l_bb, 50).expect("Expanding roi error")
+                            }
+                        };
                         if let Ok(bbox) = t.update(&crop) {
+                            last_bbox = bbox;
                             if let Some(bbox) = bbox {
                                 imgproc::rectangle(
                                     &mut mat,
@@ -203,6 +207,7 @@ fn main() -> opencv::Result<()> {
                         if let Some(candidate) = candidate {
                             println!("init tracker: {:?}", candidate);
                             nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
+                            last_bbox = Some(candidate);
                         }
 
                         // let center = center_crop(&mat, 300).unwrap();

@@ -1,8 +1,8 @@
 use ndarray::{Array, Array4};
+use opencv::Result;
 use opencv::core::{Rect, ToInputArray, ToInputOutputArray};
 use opencv::prelude::*;
 use opencv::{core, imgproc};
-use opencv::Result;
 use std::fs;
 
 #[derive(Debug)]
@@ -74,7 +74,9 @@ pub fn mat_to_ndarray(
 
 pub fn center_crop(frame: &impl ToInputArray, crop_size: i32) -> Result<Mat> {
     let input_array = frame.input_array().expect("frame.input_array() failed");
-    let mat = input_array.get_mat(0).expect("input_array().get_mat(0) failed");
+    let mat = input_array
+        .get_mat(0)
+        .expect("input_array().get_mat(0) failed");
 
     let rows = mat.rows();
     let cols = mat.cols();
@@ -84,6 +86,49 @@ pub fn center_crop(frame: &impl ToInputArray, crop_size: i32) -> Result<Mat> {
 
     let roi = core::Rect::new(x, y, crop_size, crop_size);
     let cropped = Mat::roi(&mat, roi).expect("roi() failed");
+
+    Ok(cropped.clone_pointee())
+}
+
+pub fn expand_roi(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -> Result<Mat> {
+    let input_array = frame.input_array()?;
+    let mat = input_array.get_mat(0)?;
+
+    let rows = mat.rows();
+    let cols = mat.cols();
+
+    // Новый ROI с расширением
+    let mut x = prev_roi.x - expand;
+    let mut y = prev_roi.y - expand;
+    let mut w = prev_roi.width + expand * 2;
+    let mut h = prev_roi.height + expand * 2;
+
+    // Корректируем границы по размеру изображения
+    if x < 0 {
+        w += x; // уменьшаем ширину
+        x = 0;
+    }
+    if y < 0 {
+        h += y; // уменьшаем высоту
+        y = 0;
+    }
+    if x + w > cols {
+        w = cols - x;
+    }
+    if y + h > rows {
+        h = rows - y;
+    }
+
+    // Если размеры ушли в ноль или отрицательные → пустой ROI
+    if w <= 0 || h <= 0 {
+        return Err(opencv::Error::new(
+            opencv::core::StsBadArg,
+            "Expanded ROI is invalid".to_string(),
+        ));
+    }
+
+    let roi = Rect::new(x, y, w, h);
+    let cropped = Mat::roi(&mat, roi)?;
 
     Ok(cropped.clone_pointee())
 }
@@ -153,10 +198,20 @@ pub fn get_mem_usage() -> f32 {
 
     for line in mem_info.lines() {
         if line.starts_with("MemTotal:") {
-            total = line.split_whitespace().nth(1).unwrap_or("0").parse::<f32>().unwrap_or(0.0);
+            total = line
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("0")
+                .parse::<f32>()
+                .unwrap_or(0.0);
         }
         if line.starts_with("MemAvailable:") {
-            free = line.split_whitespace().nth(1).unwrap_or("0").parse::<f32>().unwrap_or(0.0);
+            free = line
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("0")
+                .parse::<f32>()
+                .unwrap_or(0.0);
         }
     }
 
