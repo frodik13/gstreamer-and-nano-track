@@ -1,10 +1,11 @@
 use std::path::Path;
 use opencv::core::{Ptr, Rect, ToInputArray};
 use opencv::prelude::*;
-use opencv::video::{TrackerNano, TrackerNano_Params, TrackerNano_ParamsTrait, TrackerTrait};
+use opencv::video::{TrackerDaSiamRPN, TrackerDaSiamRPN_Params, TrackerNano, TrackerNano_Params, TrackerNano_ParamsTrait, TrackerTrait};
 
 pub struct NanoTrack {
     tracker: Ptr<TrackerNano>,
+    second_tracker: Ptr<TrackerDaSiamRPN>,
 }
 
 impl NanoTrack {
@@ -22,11 +23,29 @@ impl NanoTrack {
         let mut param = TrackerNano_Params::default()?;
         param.set_backbone(backbone.to_str().unwrap());
         param.set_neckhead(head.to_str().unwrap());
-        //param.set_backend()
 
         let mut tracker = TrackerNano::create(&param)?;
         tracker.init(frame, initial_bbox)?;
-        Ok(Self { tracker })
+
+        let model_siam_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("models")
+            .join("dasiamrpn_model.onnx");
+
+        let cls1 = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("models")
+            .join("dasiamrpn_kernel_cls1.onnx");
+
+        let r1 = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("models")
+            .join("dasiamrpn_kernel_r1.onnx");
+
+        let mut param = TrackerDaSiamRPN_Params::default()?;
+        param.set_model(model_siam_path.to_str().unwrap());
+        param.set_kernel_cls1(cls1.to_str().unwrap());
+        param.set_kernel_r1(r1.to_str().unwrap());
+        let second_tracker = TrackerDaSiamRPN::create(&param)?;
+
+        Ok(Self { tracker, second_tracker })
     }
 
     pub fn update(&mut self, frame: &impl ToInputArray) -> opencv::Result<Option<Rect>> {
@@ -37,8 +56,17 @@ impl NanoTrack {
         // println!("updated {}", sw.elapsed.as_millis());
         let v = self.tracker.get_tracking_score()?;
         println!("get tracking score: {}", v);
-        if v < 0.7 {
-            return Ok(None);
+        if v < 0.87 {
+            println!("init second_tracker");
+            self.second_tracker.init(frame, bbox)?;
+            let ok = self.second_tracker.update(frame, &mut bbox)?;
+
+            let v = self.second_tracker.get_tracking_score()?;
+            return if v < 0.7 {
+                Ok(None)
+            } else {
+                Ok(Some(bbox))
+            }
         }
         if ok { Ok(Some(bbox)) } else { Ok(None) }
     }
