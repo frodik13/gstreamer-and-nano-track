@@ -1,6 +1,7 @@
 mod trackers;
 mod utils;
 mod yolo;
+mod KCFTracker;
 
 use std::fmt::format;
 use crate::trackers::NanoTrack;
@@ -12,6 +13,7 @@ use opencv::core::{Rect, Scalar};
 use opencv::prelude::*;
 use opencv::{core, imgproc};
 use std::os::raw::c_void;
+use crate::KCFTracker::KcfTracker;
 
 fn main() -> opencv::Result<()> {
     gstreamer::init().unwrap();
@@ -96,7 +98,7 @@ fn main() -> opencv::Result<()> {
 
     std::thread::spawn(move || {
         let mut yolo = YoloV8::new().unwrap();
-        let mut nano_track: Option<NanoTrack> = None;
+        let mut nano_track: Option<KcfTracker> = None;
         let mut last_bbox: Option<Rect> = None;
         loop {
             match appsink_thread.try_pull_sample(gstreamer::ClockTime::from_seconds(5)) {
@@ -204,7 +206,7 @@ fn main() -> opencv::Result<()> {
                         }
 
                         if let Some(candidate) = candidate {
-                            nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
+                            nano_track = Some(KcfTracker::new(candidate, &mat).unwrap());
                         }
                     }
 

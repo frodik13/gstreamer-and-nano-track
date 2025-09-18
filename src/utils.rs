@@ -152,5 +152,5 @@ pub fn get_mem_usage() -> f32 {
 pub fn get_cpu_temp() -> f32 {
     let temp_str = fs::read_to_string("/sys/class/thermal/thermal_zone0/temp").unwrap_or_default();
     let temp_milli: f32 = temp_str.trim().parse::<f32>().unwrap_or(0.0);
-    temp_milli / 100.0
+    temp_milli / 1000.0
 }
