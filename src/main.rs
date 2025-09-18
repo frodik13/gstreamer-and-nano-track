@@ -142,18 +142,18 @@ fn main() -> opencv::Result<()> {
                     };
 
                     if let Some(t) = nano_track.as_mut() {
-                        let roi_rect = match last_bbox {
-                            None => { Rect::new(0,0, mat.cols(), mat.rows())}
-                            Some(l_bb) => {
-                                expand_roi_rect(&mat, l_bb, 100).expect("Expand roi error")
-                            }
-                        };
+                        // let roi_rect = match last_bbox {
+                        //     None => { Rect::new(0,0, mat.cols(), mat.rows())}
+                        //     Some(l_bb) => {
+                        //         expand_roi_rect(&mat, l_bb, 100).expect("Expand roi error")
+                        //     }
+                        // };
 
-                        let crop = Mat::roi(&mat, roi_rect).expect("Can't rotate roi");
-                        if let Ok(bbox) = t.update(&crop) {
-                            if let Some(mut bbox) = bbox {
-                                bbox.x += roi_rect.x;
-                                bbox.y += roi_rect.y;
+                        // let crop = Mat::roi(&mat, roi_rect).expect("Can't rotate roi");
+                        if let Ok(bbox) = t.update(&mat) {
+                            if let Some(bbox) = bbox {
+                                // bbox.x += roi_rect.x;
+                                // bbox.y += roi_rect.y;
 
                                 last_bbox = Some(bbox);
 
