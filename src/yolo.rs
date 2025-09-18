@@ -12,7 +12,7 @@ impl YoloV8 {
     pub fn new() -> ort::Result<Self> {
         let model_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("models")
-            .join("yolov8n.onnx");
+            .join("yolov5nu.onnx");
         let session = Session::builder()?
             .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?
             .commit_from_file(model_path)?;
