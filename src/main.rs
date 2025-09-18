@@ -144,7 +144,7 @@ fn main() -> opencv::Result<()> {
                     };
 
                     if let Some(t) = nano_track.as_mut() {
-                        let crop = center_crop(&mat, 250).unwrap();
+                        let crop = center_crop(&mat, 300).unwrap();
                         if let Ok(bbox) = t.update(&crop) {
                             if let Some(bbox) = bbox {
                                 imgproc::rectangle(
@@ -165,55 +165,55 @@ fn main() -> opencv::Result<()> {
                     }
 
                     if nano_track.is_none() {
-                        // let mut input = mat_to_ndarray(&mut mat, 640, 640);
-                        // let boxes = yolo.infer2(&mut input, w, h);
-                        // let mut candidate: Option<Rect> = None;
-                        //
-                        // if let Some(prev_bbox) = last_bbox {
-                        //     let mut best_iou = 0.0;
-                        //     for b in &boxes {
-                        //         let new_bbox = Rect::new(
-                        //             b.x1 as i32,
-                        //             b.y1 as i32,
-                        //             (b.x2 - b.x1) as i32,
-                        //             (b.y2 - b.y1) as i32,
-                        //         );
-                        //         let iou_val = iou(&prev_bbox, &new_bbox);
-                        //         if iou_val > best_iou {
-                        //             best_iou = iou_val;
-                        //             candidate = Some(new_bbox);
-                        //         }
-                        //     }
-                        // }
-                        //
-                        // println!("boxes len {}", boxes.len());
-                        //
-                        // if candidate.is_none() {
-                        //     if let Some(first) = boxes.first() {
-                        //         println!("first: {:?}", first);
-                        //         candidate = Some(Rect::new(
-                        //             first.x1 as i32,
-                        //             first.y1 as i32,
-                        //             (first.x2 - first.x1) as i32,
-                        //             (first.y2 - first.y1) as i32,
-                        //         ));
-                        //     }
-                        // }
-                        //
-                        // if let Some(candidate) = candidate {
-                        //     println!("init tracker: {:?}", candidate);
-                        //     nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
-                        // }
+                        let mut input = mat_to_ndarray(&mut mat, 640, 640);
+                        let boxes = yolo.infer2(&mut input, w, h);
+                        let mut candidate: Option<Rect> = None;
 
-                        let center = center_crop(&mat, 250).unwrap();
-                        let rows = center.rows();
-                        let cols = center.cols();
+                        if let Some(prev_bbox) = last_bbox {
+                            let mut best_iou = 0.0;
+                            for b in &boxes {
+                                let new_bbox = Rect::new(
+                                    b.x1 as i32,
+                                    b.y1 as i32,
+                                    (b.x2 - b.x1) as i32,
+                                    (b.y2 - b.y1) as i32,
+                                );
+                                let iou_val = iou(&prev_bbox, &new_bbox);
+                                if iou_val > best_iou {
+                                    best_iou = iou_val;
+                                    candidate = Some(new_bbox);
+                                }
+                            }
+                        }
 
-                        let x = (cols - 100) / 2;
-                        let y = (rows - 100) / 2;
+                        println!("boxes len {}", boxes.len());
 
-                        let roi = core::Rect::new(x, y, 100, 100);
-                        nano_track = Some(NanoTrack::new(roi, &center).unwrap());
+                        if candidate.is_none() {
+                            if let Some(first) = boxes.first() {
+                                println!("first: {:?}", first);
+                                candidate = Some(Rect::new(
+                                    first.x1 as i32,
+                                    first.y1 as i32,
+                                    (first.x2 - first.x1) as i32,
+                                    (first.y2 - first.y1) as i32,
+                                ));
+                            }
+                        }
+
+                        if let Some(candidate) = candidate {
+                            println!("init tracker: {:?}", candidate);
+                            nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
+                        }
+
+                        // let center = center_crop(&mat, 300).unwrap();
+                        // let rows = center.rows();
+                        // let cols = center.cols();
+                        //
+                        // let x = (cols - 50) / 2;
+                        // let y = (rows - 50) / 2;
+                        //
+                        // let roi = core::Rect::new(x, y, 50, 50);
+                        // nano_track = Some(NanoTrack::new(roi, &center).unwrap());
                     }
 
                     let cpu = get_cpu_usage();
