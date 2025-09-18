@@ -22,6 +22,7 @@ impl NanoTrack {
         let mut param = TrackerNano_Params::default()?;
         param.set_backbone(backbone.to_str().unwrap());
         param.set_neckhead(head.to_str().unwrap());
+        //param.set_backend()
 
         let mut tracker = TrackerNano::create(&param)?;
         tracker.init(frame, initial_bbox)?;

@@ -2,6 +2,7 @@ use ndarray::{Array, Array4};
 use opencv::core::{Rect, ToInputArray, ToInputOutputArray};
 use opencv::prelude::*;
 use opencv::{core, imgproc};
+use opencv::Result;
 use std::fs;
 
 #[derive(Debug)]
@@ -69,6 +70,22 @@ pub fn mat_to_ndarray(
     }
 
     Array4::from_shape_vec((1, 3, rows, cols), out).unwrap()
+}
+
+pub fn center_crop(frame: &impl ToInputArray, crop_size: i32) -> Result<Mat> {
+    let input_array = frame.input_array().expect("frame.input_array() failed");
+    let mat = input_array.get_mat(0).expect("input_array().get_mat(0) failed");
+
+    let rows = mat.rows();
+    let cols = mat.cols();
+
+    let x = (cols - crop_size) / 2;
+    let y = (rows - crop_size) / 2;
+
+    let roi = core::Rect::new(x, y, crop_size, crop_size);
+    let cropped = Mat::roi(&mat, roi).expect("roi() failed");
+
+    Ok(cropped.clone_pointee())
 }
 
 pub fn draw_bboxes(frame: &mut Mat, bboxes: &[BBox], labels: &[&str]) -> opencv::Result<()> {

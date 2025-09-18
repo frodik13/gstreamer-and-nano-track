@@ -5,7 +5,7 @@ mod kcftracker;
 
 use std::fmt::format;
 use crate::trackers::NanoTrack;
-use crate::utils::{get_cpu_temp, get_cpu_usage, get_mem_usage, iou, mat_to_ndarray};
+use crate::utils::{center_crop, get_cpu_temp, get_cpu_usage, get_mem_usage, iou, mat_to_ndarray};
 use crate::yolo::YoloV8;
 use gstreamer::Pipeline;
 use gstreamer::prelude::*;
@@ -129,15 +129,6 @@ fn main() -> opencv::Result<()> {
 
                     let mut data = map.as_slice().to_vec();
 
-                    //let mut mat = match Mat::new_rows_cols_with_bytes_mut::<u8>(h, w * 3, &mut data)
-                    //{
-                    //    Ok(m) => m,
-                    //    Err(err) => {
-                    //        eprintln!("Can't get mat: {}", err);
-                    //        continue;
-                    //    }
-                    //};
-
                     let mut mat = match Mat::new_rows_cols_with_data_unsafe(
                         h,
                         w,
@@ -153,7 +144,8 @@ fn main() -> opencv::Result<()> {
                     };
 
                     if let Some(t) = nano_track.as_mut() {
-                        if let Ok(bbox) = t.update(&mat) {
+                        let crop = center_crop(&mat, 250).unwrap();
+                        if let Ok(bbox) = t.update(&crop) {
                             if let Some(bbox) = bbox {
                                 imgproc::rectangle(
                                     &mut mat,
@@ -173,45 +165,55 @@ fn main() -> opencv::Result<()> {
                     }
 
                     if nano_track.is_none() {
-                        let mut input = mat_to_ndarray(&mut mat, 640, 640);
-                        let boxes = yolo.infer2(&mut input, w, h);
-                        let mut candidate: Option<Rect> = None;
+                        // let mut input = mat_to_ndarray(&mut mat, 640, 640);
+                        // let boxes = yolo.infer2(&mut input, w, h);
+                        // let mut candidate: Option<Rect> = None;
+                        //
+                        // if let Some(prev_bbox) = last_bbox {
+                        //     let mut best_iou = 0.0;
+                        //     for b in &boxes {
+                        //         let new_bbox = Rect::new(
+                        //             b.x1 as i32,
+                        //             b.y1 as i32,
+                        //             (b.x2 - b.x1) as i32,
+                        //             (b.y2 - b.y1) as i32,
+                        //         );
+                        //         let iou_val = iou(&prev_bbox, &new_bbox);
+                        //         if iou_val > best_iou {
+                        //             best_iou = iou_val;
+                        //             candidate = Some(new_bbox);
+                        //         }
+                        //     }
+                        // }
+                        //
+                        // println!("boxes len {}", boxes.len());
+                        //
+                        // if candidate.is_none() {
+                        //     if let Some(first) = boxes.first() {
+                        //         println!("first: {:?}", first);
+                        //         candidate = Some(Rect::new(
+                        //             first.x1 as i32,
+                        //             first.y1 as i32,
+                        //             (first.x2 - first.x1) as i32,
+                        //             (first.y2 - first.y1) as i32,
+                        //         ));
+                        //     }
+                        // }
+                        //
+                        // if let Some(candidate) = candidate {
+                        //     println!("init tracker: {:?}", candidate);
+                        //     nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
+                        // }
 
-                        if let Some(prev_bbox) = last_bbox {
-                            let mut best_iou = 0.0;
-                            for b in &boxes {
-                                let new_bbox = Rect::new(
-                                    b.x1 as i32,
-                                    b.y1 as i32,
-                                    (b.x2 - b.x1) as i32,
-                                    (b.y2 - b.y1) as i32,
-                                );
-                                let iou_val = iou(&prev_bbox, &new_bbox);
-                                if iou_val > best_iou {
-                                    best_iou = iou_val;
-                                    candidate = Some(new_bbox);
-                                }
-                            }
-                        }
+                        let center = center_crop(&mat, 250).unwrap();
+                        let rows = center.rows();
+                        let cols = center.cols();
 
-                        println!("boxes len {}", boxes.len());
+                        let x = (cols - 100) / 2;
+                        let y = (rows - 100) / 2;
 
-                        if candidate.is_none() {
-                            if let Some(first) = boxes.first() {
-                                println!("first: {:?}", first);
-                                candidate = Some(Rect::new(
-                                    first.x1 as i32,
-                                    first.y1 as i32,
-                                    (first.x2 - first.x1) as i32,
-                                    (first.y2 - first.y1) as i32,
-                                ));
-                            }
-                        }
-
-                        if let Some(candidate) = candidate {
-                            println!("init tracker: {:?}", candidate);
-                            nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
-                        }
+                        let roi = core::Rect::new(x, y, 100, 100);
+                        nano_track = Some(NanoTrack::new(roi, &center).unwrap());
                     }
 
                     let cpu = get_cpu_usage();
