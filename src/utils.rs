@@ -230,7 +230,7 @@ pub fn get_cpu_temp() -> f32 {
 }
 
 pub fn expand_roi_rect(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -> Result<Rect> {
-    let input_array = frame.input_array()?;
+    /*let input_array = frame.input_array()?;
     let mat = input_array.get_mat(0)?;
 
     let rows = mat.rows();
@@ -264,7 +264,30 @@ pub fn expand_roi_rect(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -
         return Ok(Rect::new(0, 0, rows, cols));
     }
 
-    Ok(Rect::new(x, y, w, h))
+    Ok(Rect::new(x, y, w, h))*/
+
+    let mat = frame.input_array()?.get_mat(0)?;
+    let rows = mat.rows();
+    let cols = mat.cols();
+
+    let x0 = prev_roi.x.max(0).min(cols);
+    let y0 = prev_roi.y.max(0).min(rows);
+    let x1 = (prev_roi.x + prev_roi.width).max(0).min(cols);
+    let y1 = (prev_roi.y + prev_roi.height).max(0).min(rows);
+
+    let nx = (x0 - expand).max(0);
+    let ny = (y0 - expand).max(0);
+    let nx1 = (x1 + expand).min(cols);
+    let ny1 = (y1 + expand).min(rows);
+
+    let nw = nx1 - nx;
+    let nh = ny1 - ny;
+
+    if nw <= 0 || nh <= 0 {
+        return Ok(Rect::new(0, 0, cols, rows));
+    }
+
+    Ok(Rect::new(nx, ny, nw, nh))
 }
 
 pub fn expand_roi(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -> Result<(Mat, Rect)> {
