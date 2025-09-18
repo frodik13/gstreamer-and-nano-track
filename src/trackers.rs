@@ -36,7 +36,7 @@ impl NanoTrack {
         // println!("updated {}", sw.elapsed.as_millis());
         let v = self.tracker.get_tracking_score()?;
         println!("get tracking score: {}", v);
-        if v < 0.3 {
+        if v < 0.7 {
             return Ok(None);
         }
         if ok { Ok(Some(bbox)) } else { Ok(None) }

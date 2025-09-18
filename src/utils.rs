@@ -26,7 +26,7 @@ pub fn mat_to_ndarray(frame: &impl ToInputArray, width: i32, height: i32) -> Arr
 
     // 2) BGR -> RGB
     let mut rgb = Mat::default();
-    imgproc::cvt_color(&resized, &mut rgb, imgproc::COLOR_BGR2RGB, 0).unwrap();
+    imgproc::cvt_color(&resized, &mut rgb, imgproc::COLOR_BGR2RGB, 0, opencv::core::AlgorithmHint::ALGO_HINT_DEFAULT).unwrap();
 
     // 3) uint8 -> float32 и нормализация /255
     let mut rgb_float = Mat::default();

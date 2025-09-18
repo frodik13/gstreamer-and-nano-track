@@ -2,6 +2,7 @@ mod trackers;
 mod utils;
 mod yolo;
 
+use std::os::raw::c_void;
 use gstreamer::prelude::*;
 use gstreamer::{Pipeline};
 use opencv::prelude::*;
@@ -17,7 +18,7 @@ fn main() -> opencv::Result<()> {
     let pipeline_in_str = concat!(
         "libcamerasrc ! ",
         "videoconvert ! ",
-        "video/x-raw,format=RGB,width=1632,height=1232,framerate=10/1 ! ",
+        "video/x-raw,format=BGR,width=1632,height=1232,framerate=10/1 ! ",
         "appsink name=sink sync=false max-buffers=1 drop=true"
     );
 
@@ -49,7 +50,7 @@ fn main() -> opencv::Result<()> {
     let height = 1232i32;
     appsrc.set_caps(Some(
         &gstreamer::Caps::builder("video/x-raw")
-            .field("format", &"RGB")
+            .field("format", &"BGR")
             .field("width", &width)
             .field("height", &height)
             .field("framerate", &gstreamer::Fraction::new(10, 1))
@@ -101,7 +102,7 @@ fn main() -> opencv::Result<()> {
                 None => {
                     println!("Can't pull sample");
                 }
-                Some(sample) => {
+                Some(sample) => unsafe {
                     let buffer = match sample.buffer() {
                         None => {
                             eprintln!("Can't get buffer");
@@ -125,8 +126,16 @@ fn main() -> opencv::Result<()> {
 
                     let mut data = map.as_slice().to_vec();
 
-                    let mut mat = match Mat::new_rows_cols_with_bytes_mut::<u8>(h, w * 3, &mut data)
-                    {
+                    //let mut mat = match Mat::new_rows_cols_with_bytes_mut::<u8>(h, w * 3, &mut data)
+                    //{
+                    //    Ok(m) => m,
+                    //    Err(err) => {
+                    //        eprintln!("Can't get mat: {}", err);
+                    //        continue;
+                    //    }
+                    //};
+
+			let mut mat = match Mat::new_rows_cols_with_data_unsafe(h, w, core::CV_8UC3, data.as_mut_ptr() as *mut c_void, core::Mat_AUTO_STEP){
                         Ok(m) => m,
                         Err(err) => {
                             eprintln!("Can't get mat: {}", err);
@@ -136,14 +145,18 @@ fn main() -> opencv::Result<()> {
 
                     if let Some(t) = nano_track.as_mut() {
                         if let Ok(bbox) = t.update(&mat) {
-                            imgproc::rectangle(
-                                &mut mat,
-                                bbox.unwrap(),
-                                Scalar::new(0.0, 255., 0., 0.),
-                                2,
-                                imgproc::LINE_8,
-                                0,
-                            ).unwrap();
+                            if let Some(bbox) = bbox {
+                                imgproc::rectangle(
+                                    &mut mat,
+                                    bbox,
+                                    Scalar::new(0.0, 255., 0., 0.),
+                                    2,
+                                    imgproc::LINE_8,
+                                    0,
+                                ).unwrap();
+                            } else {
+                                nano_track = None;
+                            }
                         } else {
                             nano_track = None;
                         }

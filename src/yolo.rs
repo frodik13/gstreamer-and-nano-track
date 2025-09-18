@@ -73,7 +73,7 @@ impl YoloV8 {
                 continue;
             }
 
-            if best_class == 4 || best_class == 8 || best_class == 2 || best_class == 5 || best_class == 7 {
+            // if best_class == 4 || best_class == 8 || best_class == 2 || best_class == 5 || best_class == 7 {
                 boxes.push(BBox {
                     x1: xc - w / 2.0,
                     y1: yc - h / 2.0,
@@ -82,7 +82,7 @@ impl YoloV8 {
                     class_id: best_class,
                     confidence: best_prob,
                 });
-            }
+            // }
         }
 
         //sw.stop();
