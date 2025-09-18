@@ -2,15 +2,16 @@ mod trackers;
 mod utils;
 mod yolo;
 
-use std::os::raw::c_void;
+use std::fmt::format;
+use crate::trackers::NanoTrack;
+use crate::utils::{get_cpu_temp, get_cpu_usage, get_mem_usage, iou, mat_to_ndarray};
+use crate::yolo::YoloV8;
+use gstreamer::Pipeline;
 use gstreamer::prelude::*;
-use gstreamer::{Pipeline};
+use opencv::core::{Rect, Scalar};
 use opencv::prelude::*;
 use opencv::{core, imgproc};
-use opencv::core::{Rect, Scalar};
-use crate::trackers::NanoTrack;
-use crate::utils::{iou, mat_to_ndarray};
-use crate::yolo::YoloV8;
+use std::os::raw::c_void;
 
 fn main() -> opencv::Result<()> {
     gstreamer::init().unwrap();
@@ -135,7 +136,13 @@ fn main() -> opencv::Result<()> {
                     //    }
                     //};
 
-			let mut mat = match Mat::new_rows_cols_with_data_unsafe(h, w, core::CV_8UC3, data.as_mut_ptr() as *mut c_void, core::Mat_AUTO_STEP){
+                    let mut mat = match Mat::new_rows_cols_with_data_unsafe(
+                        h,
+                        w,
+                        core::CV_8UC3,
+                        data.as_mut_ptr() as *mut c_void,
+                        core::Mat_AUTO_STEP,
+                    ) {
                         Ok(m) => m,
                         Err(err) => {
                             eprintln!("Can't get mat: {}", err);
@@ -153,7 +160,8 @@ fn main() -> opencv::Result<()> {
                                     2,
                                     imgproc::LINE_8,
                                     0,
-                                ).unwrap();
+                                )
+                                .unwrap();
                             } else {
                                 nano_track = None;
                             }
@@ -173,8 +181,8 @@ fn main() -> opencv::Result<()> {
                                 let new_bbox = Rect::new(
                                     b.x1 as i32,
                                     b.y1 as i32,
-                                    (b.x2 -b.x1) as i32,
-                                    (b.y2 -b.y1) as i32,
+                                    (b.x2 - b.x1) as i32,
+                                    (b.y2 - b.y1) as i32,
                                 );
                                 let iou_val = iou(&prev_bbox, &new_bbox);
                                 if iou_val > best_iou {
@@ -200,18 +208,23 @@ fn main() -> opencv::Result<()> {
                         }
                     }
 
+                    let cpu = get_cpu_usage();
+                    let mem = get_mem_usage();
+                    let temp = get_cpu_temp();
 
-                    // let _ = imgproc::put_text(
-                    //     &mut mat,
-                    //     "Rust and OpenCV",
-                    //     core::Point::new(30, 50),
-                    //     imgproc::FONT_HERSHEY_SIMPLEX,
-                    //     1.0,
-                    //     core::Scalar::new(0.0, 0.0, 255.0, 0.0),
-                    //     2,
-                    //     imgproc::LINE_AA,
-                    //     false,
-                    // );
+                    let text = format!("CPU: {:.1}% | RAM: {:.1}% | Temp: {:.1}C", cpu, mem, temp);
+
+                    let _ = imgproc::put_text(
+                        &mut mat,
+                        text.as_str(),
+                        core::Point::new(30, 50),
+                        imgproc::FONT_HERSHEY_SIMPLEX,
+                        1.0,
+                        core::Scalar::new(0.0, 0.0, 255.0, 0.0),
+                        2,
+                        imgproc::LINE_AA,
+                        false,
+                    );
 
                     let mut out_buffer = gstreamer::Buffer::with_size((w * h * 3) as usize)
                         .expect("Can't get buffer");
@@ -228,7 +241,7 @@ fn main() -> opencv::Result<()> {
                             continue;
                         }
                     }
-                }
+                },
             }
         }
     });
