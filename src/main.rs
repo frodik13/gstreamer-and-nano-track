@@ -4,7 +4,7 @@ mod utils;
 mod yolo;
 
 use crate::trackers::NanoTrack;
-use crate::utils::{center_crop, expand_roi, get_cpu_temp, get_cpu_usage, get_mem_usage, iou, mat_to_ndarray};
+use crate::utils::{center_crop, expand_roi, expand_roi_rect, get_cpu_temp, get_cpu_usage, get_mem_usage, iou, mat_to_ndarray};
 use crate::yolo::YoloV8;
 use gstreamer::Pipeline;
 use gstreamer::prelude::*;
@@ -142,15 +142,21 @@ fn main() -> opencv::Result<()> {
                     };
 
                     if let Some(t) = nano_track.as_mut() {
-                        let crop = match last_bbox {
-                            None => {&mat}
+                        let roi_rect = match last_bbox {
+                            None => { Rect::new(0,0, mat.cols(), mat.rows())}
                             Some(l_bb) => {
-                                &expand_roi(&mat, l_bb, 50).expect("Expanding roi error")
+                                expand_roi_rect(&mat, l_bb, 100).expect("Expand roi error")
                             }
                         };
+
+                        let crop = Mat::roi(&mat, roi_rect).expect("Can't rotate roi");
                         if let Ok(bbox) = t.update(&crop) {
-                            last_bbox = bbox;
-                            if let Some(bbox) = bbox {
+                            if let Some(mut bbox) = bbox {
+                                bbox.x += roi_rect.x;
+                                bbox.y += roi_rect.y;
+
+                                last_bbox = Some(bbox);
+
                                 imgproc::rectangle(
                                     &mut mat,
                                     bbox,
@@ -162,9 +168,11 @@ fn main() -> opencv::Result<()> {
                                 .unwrap();
                             } else {
                                 nano_track = None;
+                                last_bbox = None;
                             }
                         } else {
                             nano_track = None;
+                            last_bbox = None;
                         }
                     }
 

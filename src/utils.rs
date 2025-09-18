@@ -90,7 +90,7 @@ pub fn center_crop(frame: &impl ToInputArray, crop_size: i32) -> Result<Mat> {
     Ok(cropped.clone_pointee())
 }
 
-pub fn expand_roi(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -> Result<Mat> {
+/*pub fn expand_roi(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -> Result<Mat> {
     let input_array = frame.input_array()?;
     let mat = input_array.get_mat(0)?;
 
@@ -121,17 +121,18 @@ pub fn expand_roi(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -> Res
 
     // Если размеры ушли в ноль или отрицательные → пустой ROI
     if w <= 0 || h <= 0 {
-        return Err(opencv::Error::new(
-            opencv::core::StsBadArg,
-            "Expanded ROI is invalid".to_string(),
-        ));
+        return Ok(mat);
+        // return Err(opencv::Error::new(
+        //     opencv::core::StsBadArg,
+        //     "Expanded ROI is invalid".to_string(),
+        // ));
     }
 
     let roi = Rect::new(x, y, w, h);
     let cropped = Mat::roi(&mat, roi)?;
 
     Ok(cropped.clone_pointee())
-}
+}*/
 
 pub fn draw_bboxes(frame: &mut Mat, bboxes: &[BBox], labels: &[&str]) -> opencv::Result<()> {
     for bbox in bboxes {
@@ -226,4 +227,49 @@ pub fn get_cpu_temp() -> f32 {
     let temp_str = fs::read_to_string("/sys/class/thermal/thermal_zone0/temp").unwrap_or_default();
     let temp_milli: f32 = temp_str.trim().parse::<f32>().unwrap_or(0.0);
     temp_milli / 1000.0
+}
+
+pub fn expand_roi_rect(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -> Result<Rect> {
+    let input_array = frame.input_array()?;
+    let mat = input_array.get_mat(0)?;
+
+    let rows = mat.rows();
+    let cols = mat.cols();
+
+    let mut x = prev_roi.x - expand;
+    let mut y = prev_roi.y - expand;
+    let mut w = prev_roi.width + expand * 2;
+    let mut h = prev_roi.height + expand * 2;
+
+    if x < 0 {
+        w += x;
+        x = 0;
+    }
+    if y < 0 {
+        h += y;
+        y = 0;
+    }
+    if x + w > cols {
+        w = cols - x;
+    }
+    if y + h > rows {
+        h = rows - y;
+    }
+
+    if w <= 0 || h <= 0 {
+        return Err(opencv::Error::new(
+            opencv::core::StsBadArg,
+            "Expanded ROI is invalid".to_string(),
+        ));
+    }
+
+    Ok(Rect::new(x, y, w, h))
+}
+
+pub fn expand_roi(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -> Result<(Mat, Rect)> {
+    let roi = expand_roi_rect(frame, prev_roi, expand)?;
+    let input_array = frame.input_array()?;
+    let mat = input_array.get_mat(0)?;
+    let cropped = Mat::roi(&mat, roi)?;
+    Ok((cropped.clone_pointee(), roi))
 }
