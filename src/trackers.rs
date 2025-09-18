@@ -6,6 +6,7 @@ use opencv::video::{TrackerDaSiamRPN, TrackerDaSiamRPN_Params, TrackerNano, Trac
 pub struct NanoTrack {
     tracker: Ptr<TrackerNano>,
     second_tracker: Ptr<TrackerDaSiamRPN>,
+    last_bbox: Option<Rect>,
 }
 
 impl NanoTrack {
@@ -45,7 +46,7 @@ impl NanoTrack {
         param.set_kernel_r1(r1.to_str().unwrap());
         let second_tracker = TrackerDaSiamRPN::create(&param)?;
 
-        Ok(Self { tracker, second_tracker })
+        Ok(Self { tracker, second_tracker, last_bbox: Some(initial_bbox) })
     }
 
     pub fn update(&mut self, frame: &impl ToInputArray) -> opencv::Result<Option<Rect>> {
@@ -58,7 +59,11 @@ impl NanoTrack {
         println!("get tracking score: {}", v);
         if v < 0.87 {
             println!("init second_tracker");
-            self.second_tracker.init(frame, bbox)?;
+            let last_bbox = match self.last_bbox {
+                None => {bbox}
+                Some(b) => {b}
+            };
+            self.second_tracker.init(frame, last_bbox)?;
             let ok = self.second_tracker.update(frame, &mut bbox)?;
 
             let v = self.second_tracker.get_tracking_score()?;
@@ -68,6 +73,12 @@ impl NanoTrack {
                 Ok(Some(bbox))
             }
         }
-        if ok { Ok(Some(bbox)) } else { Ok(None) }
+        if ok {
+            self.last_bbox = Some(bbox);
+            Ok(Some(bbox))
+        } else {
+            self.last_bbox = None;
+            Ok(None)
+        }
     }
 }
