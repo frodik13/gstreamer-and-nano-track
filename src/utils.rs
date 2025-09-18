@@ -257,10 +257,11 @@ pub fn expand_roi_rect(frame: &impl ToInputArray, prev_roi: Rect, expand: i32) -
     }
 
     if w <= 0 || h <= 0 {
-        return Err(opencv::Error::new(
+        /*return Err(opencv::Error::new(
             opencv::core::StsBadArg,
             "Expanded ROI is invalid".to_string(),
-        ));
+        ));*/
+        return Ok(Rect::new(0, 0, rows, cols));
     }
 
     Ok(Rect::new(x, y, w, h))
