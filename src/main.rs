@@ -2,6 +2,7 @@ mod kcftracker;
 mod trackers;
 mod utils;
 mod yolo;
+mod vit_tracker;
 
 use crate::trackers::NanoTrack;
 use crate::utils::{center_crop, expand_roi, expand_roi_rect, get_cpu_temp, get_cpu_usage, get_mem_usage, iou, mat_to_ndarray};
@@ -12,6 +13,7 @@ use opencv::core::{Rect, Scalar};
 use opencv::prelude::*;
 use opencv::{core, imgproc};
 use std::os::raw::c_void;
+use crate::vit_tracker::VitTracker;
 
 fn main() -> opencv::Result<()> {
     gstreamer::init().unwrap();
@@ -85,6 +87,10 @@ fn main() -> opencv::Result<()> {
                         eprintln!("Pipeline (in) EOS");
                         break;
                     }
+                    MessageView::StateChanged(changed) => {
+                        eprintln!("Pipeline (in) state changed: {:?}", changed);
+                        break;
+                    }
                     _ => {}
                 }
             }
@@ -96,7 +102,7 @@ fn main() -> opencv::Result<()> {
 
     std::thread::spawn(move || {
         let mut yolo = YoloV8::new().unwrap();
-        let mut nano_track: Option<NanoTrack> = None;
+        let mut nano_track: Option<VitTracker> = None;
         let mut last_bbox: Option<Rect> = None;
         loop {
             match appsink_thread.try_pull_sample(gstreamer::ClockTime::from_seconds(5)) {
@@ -214,7 +220,7 @@ fn main() -> opencv::Result<()> {
 
                         if let Some(candidate) = candidate {
                             println!("init tracker: {:?}", candidate);
-                            nano_track = Some(NanoTrack::new(candidate, &mat).unwrap());
+                            nano_track = Some(VitTracker::new(candidate, &mat).unwrap());
                             last_bbox = Some(candidate);
                         }
 

@@ -57,7 +57,7 @@ impl NanoTrack {
         // println!("updated {}", sw.elapsed.as_millis());
         let v = self.tracker.get_tracking_score()?;
         println!("get tracking score: {}", v);
-        if v < 0.87 {
+        if v < 0.7 {
             println!("init second_tracker");
             let last_bbox = match self.last_bbox {
                 None => {bbox}
@@ -67,7 +67,8 @@ impl NanoTrack {
             let ok = self.second_tracker.update(frame, &mut bbox)?;
 
             let v = self.second_tracker.get_tracking_score()?;
-            return if v < 0.7 {
+            println!("get tracking score second tracker {}", v);
+            return if v < 0.8 {
                 Ok(None)
             } else {
                 Ok(Some(bbox))
