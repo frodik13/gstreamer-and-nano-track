@@ -10,3 +10,4 @@ gstreamer-video = "0.24.1"
 opencv = { version = "0.95.1", features = ["clang-runtime", "videoio", "highgui", "imgproc"]}
 ndarray = "0.16.1"
 ort = "2.0.0-rc.10"
+ticky = "1.0.2"

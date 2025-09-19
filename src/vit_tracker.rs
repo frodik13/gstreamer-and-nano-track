@@ -2,6 +2,7 @@ use opencv::core::{Ptr, Rect, ToInputArray};
 use opencv::prelude::*;
 use opencv::video::{TrackerVit, TrackerVit_Params};
 use std::path::Path;
+use ticky::Stopwatch;
 
 pub struct VitTracker {
     tracker: Ptr<TrackerVit>,
@@ -43,11 +44,17 @@ impl VitTracker {
     }
 
     pub fn update(&mut self, frame: &Mat) -> opencv::Result<Option<Rect>> {
+        let mut sw = Stopwatch::start_new();
         let mut bbox = Rect::default();
         let ok = self.tracker.update(&frame, &mut bbox)?;
 
         let score = self.tracker.get_tracking_score()?;
-        println!("Score vit tracker: {:?}", score);
+        sw.stop();
+        println!(
+            "Score vit tracker: {:?}. Inference time: {} ms",
+            score,
+            sw.elapsed.as_millis()
+        );
 
         if score >= 0.45 {
             self.last_bbox = Some(bbox);
@@ -58,11 +65,20 @@ impl VitTracker {
 
             if let Some(last_bbox) = self.last_bbox {
                 if let Some(last_frame) = &self.last_frame {
+                    sw.restart();
                     self.second_tracker.init(last_frame, last_bbox)?;
-                    self.second_tracker.update(frame, &mut bbox)?;
+                    sw.stop();
+                    println!("init second tracker time: {} ms", sw.elapsed.as_millis());
 
+                    sw.restart();
+                    self.second_tracker.update(frame, &mut bbox)?;
                     let score = self.second_tracker.get_tracking_score()?;
-                    println!("\tScore second tracker: {:?}", score);
+                    sw.stop();
+                    println!(
+                        "\tScore second tracker: {:?}. Inference time: {} ms",
+                        score,
+                        sw.elapsed.as_millis()
+                    );
 
                     if score >= 0.55 {
                         self.last_bbox = Some(bbox);

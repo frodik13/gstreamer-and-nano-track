@@ -104,7 +104,7 @@ fn main() -> opencv::Result<()> {
 
     std::thread::spawn(move || {
         let mut yolo = YoloV8::new().unwrap();
-        let mut nano_track: Option<VitWithDaSiamTracker> = None;
+        let mut nano_track: Option<VitTracker> = None;
         let mut last_bbox: Option<Rect> = None;
         loop {
             match appsink_thread.try_pull_sample(gstreamer::ClockTime::from_seconds(5)) {
@@ -222,7 +222,7 @@ fn main() -> opencv::Result<()> {
 
                         if let Some(candidate) = candidate {
                             println!("init tracker: {:?}", candidate);
-                            nano_track = Some(VitWithDaSiamTracker::new(candidate, &mat).unwrap());
+                            nano_track = Some(VitTracker::new(candidate, &mat).unwrap());
                             last_bbox = Some(candidate);
                         }
 
