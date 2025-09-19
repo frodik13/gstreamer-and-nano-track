@@ -30,7 +30,7 @@ impl VitTracker {
         let score = self.tracker.get_tracking_score()?;
         println!("Score vit tracker: {:?}", score);
 
-        if score < 0.7 {
+        if score >= 0.45 {
             Ok(Some(bbox))
         } else {
             Ok(None)
